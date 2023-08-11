@@ -1,9 +1,8 @@
 import os
 import sys
 
-
 from datasets import load_dataset
-import transformers 
+import transformers
 import torch
 import torch.nn as nn
 
@@ -90,7 +89,7 @@ def generate_and_tokenize_prompt(data_point):
     # so that our loss is computed only on the response.
     user_prompt = (
         (
-            f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
+            f"""Below is an instruction that describes a task related to Path of Exile, paired with an input that provides further context. Write a response that appropriately completes the request.
 
 ### Instruction:
 {data_point["instruction"]}

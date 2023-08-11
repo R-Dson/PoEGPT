@@ -7,13 +7,15 @@ from trafilatura.utils import sanitize, trim
 from urllib.parse import urljoin
 import json
 from torch import cuda, bfloat16
-#import finetune
 
-MAXLEN = 4096
 from transformers import pipeline, AutoTokenizer, AutoModelForMaskedLM, LlamaForCausalLM, BitsAndBytesConfig
 
 MODEL_PATH = 'lmsys/vicuna-7b-v1.5-16k'
 DATA_PATH = 'data/text.json'
+URL_PATH = 'data/urls.json'
+
+MAXLEN = 4096
+
 class Crawler:
     
     def __init__(self):
@@ -38,26 +40,36 @@ class Crawler:
 
         self.generator = pipeline(model=self.model, tokenizer=self.tokenizer, task="text-generation")
 
+
+    def generate_instruction(self, url_text):
+        output_instruction = self.generator(f'Instruction based on "${url_text}", a Path of Exile build I recommend is ', max_length=MAXLEN, return_full_text=False)
+        return output_instruction[0]['generated_text']
+
     def crawl(self, url: str, depth=0, max_depth=3):
         self.black_list_url.add(url)
         self.counter += 1
+        self.save_urls()
 
         html = fetch_url(url)
+        if html is None:
+            return
 
         # get content on the page
         url_text = extract(html)
         url_text = sanitize(url_text)
         url_text = trim(url_text)
+
+        if url_text is None:
+            return
+        
         url_text = re.sub(r'[^\sa-zA-Z0-9\._-]', '', url_text)
         url_text_instruction = re.sub(' +', ' ', url_text)
         url_text_instruction = url_text
+
         if len(url_text) >= MAXLEN-512:
             url_text_instruction = url_text[:MAXLEN-512]
-        l = len(url_text_instruction)
-        l2 = len(url_text)
 
-        output_instruction = self.generator(f'Instruction based on "${url_text_instruction}", a Path of Exile build I recommend is ', max_length=MAXLEN, return_full_text=False)
-        output_instruction = output_instruction[0]['generated_text']
+        output_instruction = self.generate_instruction(url_text_instruction)
         tmpdict = {
             "instruction": output_instruction,
             "input": "",
@@ -89,6 +101,18 @@ class Crawler:
         json_object = json.dumps(data, indent=4)
         with open(DATA_PATH, "w") as outfile:
             outfile.write(json_object)
+
+    def load_urls(self):
+        try:
+            f = open(URL_PATH)
+            self.black_list_url = json.load(f)
+        except:
+            print("No URL file found")
+
+    def save_urls(self):
+        json_object = json.dumps(list(self.black_list_url), indent=4)
+        with open(URL_PATH, "w") as outfile:
+            outfile.write(json_object)
                 
 urls = {
     'https://poedb.tw/us' : 3,
@@ -96,11 +120,15 @@ urls = {
     'https://www.poe-vault.com' : 4,
     'https://maxroll.gg/poe/category/getting-started' : 2,
     'https://poe.ninja/builds/challenge' : 2,
-    'https://www.pathofexile.com/forum/view-thread/3409617' : 1
+    'https://www.pathofexile.com/forum/view-thread/3409617' : 1,
+    'https://old.reddit.com/r/PathOfExileBuilds': 2
 }
 
 if __name__ == "__main__":
     c = Crawler()
+    c.load_urls()
+
     for url in urls:
         c.crawl(url, max_depth=urls[url])
     pass
+

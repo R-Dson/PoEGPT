@@ -16,6 +16,8 @@ from transformers import pipeline, AutoTokenizer, AutoModel, LlamaForCausalLM, B
 from transformers.utils import logging
 import asyncio
 
+import concurrent.futures
+
 logging.set_verbosity_error()
 
 MODEL_PATH = 'lmsys/vicuna-7b-v1.5-16k'
@@ -25,9 +27,10 @@ MODEL_PATH = 'kabita-choudhary/finetuned-bart-for-conversation-summary' #works w
 
 BLACK_LIST_LANG = ['/cn/', '/kr/', '/ru/', '/jp/', '/tw/', '/po/', '/th/', '/fr/', '/de/', '/es/']
 alpha = re.compile(r'[a-zA-Z]')
+counter = 0
 
 MAXLEN = 1024#4096
-lock = asyncio.Lock()
+lock = threading.Lock()
 black_list_url = set()
 todo_list_url = set()
 
@@ -49,9 +52,9 @@ class Crawler:
         self.driver = webdriver.Chrome(options=options)
         self.driver.implicitly_wait(1)
 
-        self.counter = 0
 
-    async def generate_instruction(self, url_text):
+
+    def generate_instruction(self, url_text):
 
         if len(url_text) > MAXLEN:
             chunks = len(url_text)//MAXLEN
@@ -69,14 +72,15 @@ class Crawler:
         output_instruction = f'Provide more information about the following in Path of Exile: {output_instruction}'
         return output_instruction
 
-    async def crawl(self, url: str, depth=0):
+    def crawl(self, url: str, depth=0):
+        global counter
         max_depth = self.max_depth
         base_url = self.base_url
 
         if depth > max_depth:
             return
 
-        async with lock:
+        with lock:
             if url in black_list_url or url in todo_list_url or any([lang in url for lang in BLACK_LIST_LANG]):
                 return
 
@@ -88,10 +92,10 @@ class Crawler:
 
         if html is None:
             return
+        #print(url)
 
-        async with lock: # probably not needed
+        with lock: # probably not needed
             todo_list_url.add(url)
-        self.counter += 1
 
         # get links on the page
         to_visit = []
@@ -103,7 +107,7 @@ class Crawler:
             if a not in to_visit and a not in black_list_url:
                 i += 1
                 to_visit.append(a)
-                await self.crawl(a, depth=depth+1)
+                self.crawl(a, depth=depth+1)
 
         url_text = soup.get_text(strip=True)
 
@@ -120,7 +124,7 @@ class Crawler:
             return
 
         start_generate = time.time()
-        output_instruction = await self.generate_instruction(url_text)
+        output_instruction = self.generate_instruction(url_text)
         denerate_delta = time.time() - start_generate
 
         tmpdict = {
@@ -130,7 +134,7 @@ class Crawler:
         }
 
         time_save = time.time()
-        async with lock:
+        with lock:
             self.save_to_file(tmpdict)
             save_delta = time.time() - time_save
 
@@ -139,9 +143,10 @@ class Crawler:
 
             time_save_url = time.time()
             self.save_urls()
-        save_url_delta = time.time() - time_save_url
+            save_url_delta = time.time() - time_save_url
+            counter += 1
 
-        print(f'Finished processing: Counter: {self.counter}. Depth: {depth} of {max_depth}. {url}. Time: {denerate_delta:.2f}s. Save time: {save_delta:.2f}s. Save url time: {save_url_delta:.2f}s.')
+            print(f'Finished processing: Counter: {counter}. Depth: {depth} of {max_depth}. {url}. Time: {denerate_delta:.2f}s. Save time: {save_delta:.2f}s. Save url time: {save_url_delta:.2f}s.')
 
     def save_to_file(self, dictionary):
             with open(DATA_PATH, 'rb+') as filehandle:
@@ -188,26 +193,32 @@ async def crawl_thread(c: Crawler, url: str):
     await c.crawl(url)
 
 crawlers = []
-
 async def main():
+    executor = ThreadPoolExecutor(max_workers=10)
+    loop = asyncio.get_event_loop()
+    tasks = []
+    for url, max_depth in urls.items():
+        c = Crawler(url, max_depth) # pass executor
+        f = loop.run_in_executor(executor, c.crawl, url)
+        tasks.append(f)
 
+    await asyncio.gather(*tasks)
+    executor.shutdown()
+    return
     tasks = []
     for url, max_depth in urls.items():
         c = Crawler(url, max_depth)
         crawlers.append(c)
-        task = asyncio.create_task(crawl_thread(c, url))
-        tasks.append(task)
-
+        await loop.run_in_executor(executor, crawl_thread)
+        #task = loop.create_task(crawl_thread(c, url))
+        #tasks.append(task)
     await asyncio.gather(*tasks)
 
+from concurrent.futures import ThreadPoolExecutor
 if __name__ == "__main__":
     black_list_url = load_urls()
 
     asyncio.run(main())
 
-    for c in crawlers:
-        c.driver.close()
-
-if __name__ == "__exit__":
     for c in crawlers:
         c.driver.close()

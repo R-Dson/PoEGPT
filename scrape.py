@@ -15,6 +15,7 @@ from selenium.webdriver.chrome.options import Options
 from transformers import pipeline, AutoTokenizer, AutoModel, LlamaForCausalLM, BitsAndBytesConfig, BartForCausalLM
 from transformers.utils import logging
 import asyncio
+import random
 
 import concurrent.futures
 
@@ -36,7 +37,10 @@ todo_list_url = set()
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 device_map = "auto"
-generator = pipeline("summarization", tokenizer=tokenizer, model=MODEL_PATH, device_map=device_map)
+num_models = 4
+#generator = pipeline("summarization", tokenizer=tokenizer, model=MODEL_PATH, device_map=device_map)
+
+pipelines = [pipeline("summarization", tokenizer=tokenizer, model=MODEL_PATH, device_map=device_map) for _ in range(num_models)]
 
 class Crawler:
 
@@ -55,7 +59,7 @@ class Crawler:
 
 
     def generate_instruction(self, url_text):
-
+        generator = random.choice(pipelines)
         if len(url_text) > MAXLEN:
             chunks = len(url_text)//MAXLEN
             url_text_chunks = [ url_text[i:i+MAXLEN] for i in range(0, MAXLEN*chunks+1, MAXLEN) ]
@@ -198,7 +202,7 @@ async def main():
     loop = asyncio.get_event_loop()
     tasks = []
     for url, max_depth in urls.items():
-        c = Crawler(url, max_depth) # pass executor
+        c = Crawler(url, max_depth)
         f = loop.run_in_executor(executor, c.crawl, url)
         tasks.append(f)
 

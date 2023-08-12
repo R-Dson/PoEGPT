@@ -14,10 +14,9 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from transformers import pipeline, AutoTokenizer, AutoModel, LlamaForCausalLM, BitsAndBytesConfig, BartForCausalLM
 from transformers.utils import logging
+import asyncio
 
 logging.set_verbosity_error()
-
-
 
 MODEL_PATH = 'lmsys/vicuna-7b-v1.5-16k'
 DATA_PATH = 'data/text.json'
@@ -28,7 +27,7 @@ BLACK_LIST_LANG = ['/cn/', '/kr/', '/ru/', '/jp/', '/tw/', '/po/', '/th/', '/fr/
 alpha = re.compile(r'[a-zA-Z]')
 
 MAXLEN = 1024#4096
-lock = threading.Lock()
+lock = asyncio.Lock()
 black_list_url = set()
 todo_list_url = set()
 
@@ -77,7 +76,7 @@ class Crawler:
         if depth > max_depth:
             return
 
-        with lock:
+        async with lock:
             if url in black_list_url or url in todo_list_url or any([lang in url for lang in BLACK_LIST_LANG]):
                 return
 
@@ -90,7 +89,7 @@ class Crawler:
         if html is None:
             return
 
-        with lock: # probably not needed
+        async with lock: # probably not needed
             todo_list_url.add(url)
         self.counter += 1
 
@@ -108,14 +107,16 @@ class Crawler:
 
         url_text = soup.get_text(strip=True)
 
+        if url_text is None:
+            return
+
         url_text = url_text.replace('\n', ' ')
         url_text = re.sub(r'[^\sa-zA-Z0-9\._-]', '', url_text)
         url_text = re.sub(r'([A-Z])', r' \1', url_text)
         url_text = re.sub('\s+', ' ', url_text)
         url_text = re.sub(r'[^\w\s]', '', url_text).strip()
-        #url_text = url_text
 
-        if url_text is None or not alpha.match(url_text):
+        if not alpha.match(url_text):
             return
 
         start_generate = time.time()
@@ -129,36 +130,33 @@ class Crawler:
         }
 
         time_save = time.time()
-        with lock:
+        async with lock:
             self.save_to_file(tmpdict)
-        save_delta = time.time() - time_save
+            save_delta = time.time() - time_save
 
-            #with lock:
-
-        with lock:
             black_list_url.add(url)
             todo_list_url.remove(url)
 
-        time_save_url = time.time()
-        with lock:
+            time_save_url = time.time()
             self.save_urls()
         save_url_delta = time.time() - time_save_url
 
         print(f'Finished processing: Counter: {self.counter}. Depth: {depth} of {max_depth}. {url}. Time: {denerate_delta:.2f}s. Save time: {save_delta:.2f}s. Save url time: {save_url_delta:.2f}s.')
 
     def save_to_file(self, dictionary):
-        #with lock:
-            data = []
-            try:
-                with open(DATA_PATH, "r") as infile:
-                    data = json.load(infile)
-            except FileNotFoundError:
-                pass
+            with open(DATA_PATH, 'rb+') as filehandle:
+                filehandle.seek(-1, os.SEEK_END)
+                filehandle.truncate()
 
-            data.append(dictionary)
-
-            with open(DATA_PATH, "w") as outfile:
-                json.dump(data, outfile, indent=4)
+            with open(DATA_PATH, 'a') as f:
+                f.seek(0, 2)
+                if f.tell() == 0:
+                    f.write('[')
+                else:
+                    f.write(',')
+                f.write(json.dumps(dictionary))
+                f.write('\n]')
+            return
 
     def save_urls(self):
         json_object = json.dumps(list(black_list_url), indent=4)
@@ -189,8 +187,6 @@ async def crawl_thread(c: Crawler, url: str):
     print(f'Started crawling {url}.')
     await c.crawl(url)
 
-import asyncio
-
 crawlers = []
 
 async def main():
@@ -208,6 +204,9 @@ if __name__ == "__main__":
     black_list_url = load_urls()
 
     asyncio.run(main())
+
+    for c in crawlers:
+        c.driver.close()
 
 if __name__ == "__exit__":
     for c in crawlers:

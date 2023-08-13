@@ -26,7 +26,7 @@ DATA_PATH = 'data/text.json'
 URL_PATH = 'data/urls.json'
 MODEL_PATH = 'kabita-choudhary/finetuned-bart-for-conversation-summary' #works well and is small
 
-BLACK_LIST_LANG = ['/cn/', '/kr/', '/ru/', '/jp/', '/tw/', '/po/', '/th/', '/fr/', '/de/', '/es/']
+BLACK_LIST_LANG = ['/cn/', '/kr/', '/ru/', '/jp/', '/tw/', '/po/', '/th/', '/fr/', '/de/', '/es/',  '/br/', '/cn', '/kr', '/ru', '/jp', '/tw', '/th', '/fr', '/de', '/es',  '/br']
 alpha = re.compile(r'[a-zA-Z]')
 counter = 0
 
@@ -38,7 +38,6 @@ todo_list_url = set()
 tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 device_map = "auto"
 num_models = 4
-#generator = pipeline("summarization", tokenizer=tokenizer, model=MODEL_PATH, device_map=device_map)
 
 pipelines = [pipeline("summarization", tokenizer=tokenizer, model=MODEL_PATH, device_map=device_map) for _ in range(num_models)]
 
@@ -55,8 +54,6 @@ class Crawler:
         options.headless = True
         self.driver = webdriver.Chrome(options=options)
         self.driver.implicitly_wait(1)
-
-
 
     def generate_instruction(self, url_text):
         generator = random.choice(pipelines)
@@ -88,15 +85,21 @@ class Crawler:
             if url in black_list_url or url in todo_list_url or any([lang in url for lang in BLACK_LIST_LANG]):
                 return
 
-        if base_url not in url:
+        if any(item in url for item in ['pathofexile.com', base_url]):
+            pass
+        else:
             return
+        #if 'http://pathofexile.com' not in url and 'https://www.pathofexile.com' not in url and base_url not in url:
+        #    return
+
+        #if (base_url or ) not in url:
+        #    return
 
         self.driver.get(url)
         html = self.driver.page_source
 
         if html is None:
             return
-        #print(url)
 
         with lock: # probably not needed
             todo_list_url.add(url)
@@ -226,3 +229,4 @@ if __name__ == "__main__":
 
     for c in crawlers:
         c.driver.close()
+

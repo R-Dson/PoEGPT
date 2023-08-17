@@ -1,0 +1,20 @@
+{
+  "base_model_name": "TheBloke_Llama-2-7b-Chat-GPTQ",
+  "base_model_class": "LlamaForCausalLM",
+  "base_loaded_in_4bit": false,
+  "base_loaded_in_8bit": false,
+  "projections": "q, v",
+  "train_runtime": 50036.7955,
+  "train_samples_per_second": 2.664,
+  "train_steps_per_second": 0.166,
+  "total_flos": 2.945574577058611e+16,
+  "train_loss": 0.6878417630990347,
+  "epoch": 3.0,
+  "current_steps": 66621,
+  "loss": 0.4781,
+  "learning_rate": 0.0003,
+  "eval_loss": 0.4307979941368103,
+  "eval_runtime": 98.3651,
+  "eval_samples_per_second": 10.156,
+  "eval_steps_per_second": 1.271
+}

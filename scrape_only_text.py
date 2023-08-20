@@ -49,7 +49,6 @@ class Crawler:
         options.add_argument("--no-sandbox")
         options.add_argument("--enable-javascript")
 
-
         self.driver = webdriver.Chrome(options=options)
 
         self.driver.implicitly_wait(2)
@@ -210,21 +209,30 @@ class Crawler:
             print(f'Todo list: {len(todo_list_url)}')
 
     def save_to_file(self, dictionary):
+
+            if not os.path.exists(DATA_PATH):
+                with open(DATA_PATH, 'w') as f:
+                    f.write('[]')
+
             with open(DATA_PATH, 'rb+') as filehandle:
                 filehandle.seek(-1, os.SEEK_END)
                 filehandle.truncate()
 
             with open(DATA_PATH, 'a') as f:
                 f.seek(0, 2)
-                if f.tell() == 0:
-                    f.write('[')
-                else:
-                    f.write(',')
+                #if f.tell() == 0:
+                #    f.write('[')
+                #else:
+                f.write(',')
                 f.write(json.dumps(dictionary))
                 f.write('\n]')
             return
 
     def save_urls(self):
+        if not os.path.exists(URL_PATH):
+            with open(URL_PATH, 'w') as f:
+                f.write('[]')
+
         json_object = json.dumps(list(black_list_url), indent=4)
         with open(URL_PATH, "w") as outfile:
            outfile.write(json_object)
@@ -318,4 +326,3 @@ if __name__ == "__main__":
     counter += len(black_list_url)
 
     asyncio.run(main())
-    pass

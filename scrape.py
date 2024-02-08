@@ -36,8 +36,8 @@ DEPTH = 0
 MAX_DEPTH = 1
 BASE_URL = 2
 
-TEMPERATURE = 0.2
-MAX_NEW_TOKENS = 512
+TEMPERATURE = 0.05
+MAX_NEW_TOKENS = 1024
 API_HOST = 'http://localhost'
 API_PORT = 5000
 CTX_MAX = 16384
@@ -99,6 +99,8 @@ class Crawler:
         self.driver.implicitly_wait(2)
         self.running = True
 
+        self.remove_list = { 'payment', 'buy ', 'preferences', 'partners', 'partner', 'paypal' ,'skrill', 'crypto', 'facebook', 'instagram', 'privacy', 'policy', 'creative', 'commons', 'disclaimers', 'patreon', 'twitter', 'youtube', 'twitch', 'discord', 'reddit', 'tiktok', 'linkedin', 'pinterest', 'tumblr', 'vimeo', 'snapchat', 'whatsapp', 'imprint', 'impressum', 'contact', 'cookies', 'privacy', 'policy', 'legal', 'data', 'protection', 'sitemap', 'accessibility', 'accessable', 'access', 'help', 'faq', 'support', 'donate', 'donation', 'donations', 'report', 'reports', 'advertising', 'cookies', 'cookie', 'network policy', 'privacy policy', 'request', 'browsing', 'script', 'settings', 'IP address', 'IP', 'address', 'ticket', 'applications', 'string', 'agent', 'network', 'Your request has been blocked', 'halted', 'restriction', 'establish', 'account'}
+
     def check_url(self):
         with lock:
             if len(todo_list_url) > 0:
@@ -135,9 +137,10 @@ class Crawler:
                 self.repeatedAttempts += 1
             url, url_info = self.check_url()
 
+
     def summarize(self, text: str) -> str:
         #with self.lock:
-        return ooba_call(f'Remove all text unrelated to Path of Exile. Keep all data and numbers. Create a summary capturing the main points and key details of: {text}.')
+        return ooba_call(f'Your task is to rewrite using the original words and wordings. Generate a concise rewrite of {text} without losing important information, and capture the main points and key details. Start by mention what the text is about. Do not mention this rewrite. Only write using the original texts wording. Only use the text provided. Remove all mentions of {self.remove_list} if they exist. ')
 
     def crawl(self, url: str, depths: list):
         global counter
@@ -177,7 +180,7 @@ class Crawler:
                     todo_list_url[a] = [depth + 1, max_depth, base_url]
 
         soup_extra = BeautifulSoup(html, 'html.parser')
-        remove_list = { 'payment', 'buy ', 'preferences', 'partners', 'partner', 'paypal' ,'skrill', 'crypto', 'facebook', 'instagram', 'privacy', 'policy', 'creative', 'commons', 'disclaimers', 'patreon', 'twitter', 'youtube', 'twitch', 'discord', 'reddit', 'tiktok', 'linkedin', 'pinterest', 'tumblr', 'vimeo', 'snapchat', 'whatsapp', 'imprint', 'impressum', 'contact', 'cookies', 'privacy', 'policy', 'legal', 'data', 'protection', 'sitemap', 'accessibility', 'accessable', 'access', 'help', 'faq', 'support', 'donate', 'donation', 'donations', 'report', 'reports', 'advertising', 'cookies', 'cookie'}
+
 
         time_save = time.time()
         try:
@@ -207,7 +210,7 @@ class Crawler:
             pass
 
         for tag in soup_extra.find_all('a'):
-            if any(x in tag.get_text().lower() for x in remove_list):
+            if any(x in tag.get_text().lower() for x in self.remove_list):
                 tag.decompose()
 
         url_text = soup_extra.get_text('\n', strip=True)
@@ -240,20 +243,23 @@ class Crawler:
             except:
                 pass
 
-        with save_lock:
+
             time_save = time.time()
 
             if url_text != '':
                 url_text = self.summarize(url_text)
-                tmpdict = {
-                    "output": url_text,
-                    "processed": False,
-                }
-                self.save_to_file(tmpdict)
-            save_delta = time.time() - time_save
-            time_save_url = time.time()
-            self.save_urls()
-            save_url_delta = time.time() - time_save_url
+                if url_text != ' ' and url_text != '':
+
+                    tmpdict = {
+                        "output": url_text,
+                        "processed": False,
+                    }
+                    self.save_to_file(tmpdict)
+                with save_lock:
+                    save_delta = time.time() - time_save
+                    time_save_url = time.time()
+                    self.save_urls()
+                    save_url_delta = time.time() - time_save_url
         counter += 1
         print(f'Finished processing: count: {counter}. Depth: {depth} of {max_depth}. Thread {self.index}. {url}. Save time: {save_delta:.2f}s. Save url time: {save_url_delta:.2f}s. Process time: {process_delta:.2f}s.')
         if counter % 100 == 0:
@@ -320,7 +326,7 @@ async def main():
 
     crawlers = []
 
-    num_threads = 16
+    num_threads = 8
     executor = ThreadPoolExecutor(max_workers=num_threads)
     loop = asyncio.get_event_loop()
 
